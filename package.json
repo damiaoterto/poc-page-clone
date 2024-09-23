@@ -1,0 +1,13 @@
+{
+  "name": "poc-page-clone",
+  "version": "1.0.0",
+  "description": "A POC for validation a web page cloner system",
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
