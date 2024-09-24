@@ -1,8 +1,9 @@
 const axios = require('axios')
 const cheerio = require('cheerio')
 const { URL } = require('node:url')
-const { resolve, join, basename } = require('node:path')
+const { resolve, join, basename, extname } = require('node:path')
 const fs = require('node:fs/promises')
+const { createHash } = require('node:crypto')
 
 const WEB_SITES_PAGE = resolve(process.cwd(), 'websites')
 
@@ -16,40 +17,49 @@ async function downloadWebpage(pageUrl) {
   const webpagePath = join(WEB_SITES_PAGE, domain)
   await fs.mkdir(webpagePath, { recursive: true })
 
-  await fs.writeFile(join(webpagePath, 'index.html'), $.html())
+  function genUniqueName(url) {
+    const hash = createHash('md5').update(url).digest('hex')
+    const originalExt = extname(url) || '.html'
 
-  async function downloadResource(resourceUrl, type) {
+    return `${hash}${originalExt}`
+  }
+
+  async function downloadResource(el, attr, type) {
+    const resourceUrl = $(el).attr(attr)
+      if (!resourceUrl) return
+
     try {
       const fullUrl = new URL(resourceUrl, baseUrl).href
       const response = await axios.get(fullUrl, { responseType: 'arraybuffer' })
-      const filename = basename(new URL(fullUrl).pathname)
 
-      await fs.writeFile(join(webpagePath, type, filename), response.data)
+      const uniqueFilename = genUniqueName(fullUrl)
+      const localPath = join(type, uniqueFilename)
+
+      await fs.mkdir(join(webpagePath, type), { recursive: true })
+      await fs.writeFile(join(webpagePath, localPath), response.data)
+
+      $(el).attr(attr, localPath.replace(/\\/g, '/'))
+
+      console.log(`${type} subscribe resource: ${resourceUrl} -> ${localPath}`)
     } catch (error) {
       console.error(`Error ao baixar o recurso ${resourceUrl}`, error)
     }
   }
 
-  // Download CSS
-  await fs.mkdir(join(webpagePath, 'css'), { recursive: true })
-  $('link[rel="stylesheet"]').each((i, el) => {
-    const href = $(el).attr('href')
-    if (href) downloadResource(href, 'css')
-  })
+  await Promise.all(
+    $('link[rel="stylesheet"]').map((i, el) => downloadResource(el, 'href', 'css')).get()
+  )
 
-  // Download JS
-  await fs.mkdir(join(webpagePath, 'js'), { recursive: true })
-  $('script[src]').each((i, el) => {
-    const src = $(el).attr('src')
-    if (src) downloadResource(src, 'js')
-  })
+  await Promise.all(
+    $('script[src]').map((i, el) => downloadResource(el, 'src', 'js')).get()
+  )
 
-  // Download images
-  await fs.mkdir(join(webpagePath, 'img'), { recursive: true })
-  $('img[src]').each((i, el) => {
-    const src = $(el).attr('src')
-    if (src) downloadResource(src, 'img')
-  })
+  await Promise.all(
+    $('img[src]').map((i, el) => downloadResource(el, 'src', 'img')).get()
+  )
+
+  const updatedHtml = $.html()
+  await fs.writeFile(join(webpagePath, 'index.html'), updatedHtml)
 }
 
-downloadWebpage('https://assesi.com.br')
+downloadWebpage('https://site.com.br')
